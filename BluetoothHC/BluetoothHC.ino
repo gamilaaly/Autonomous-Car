@@ -11,19 +11,19 @@ void loop() {
     // read the incoming byte:
   incomingByte = Serial.read();
   if (incomingByte == 108)
-  { direction ='l';
+  { direction ='1'; // left
     Serial.println(direction);
    }
    else if (incomingByte == 114)
-  { direction ='r';
+  { direction ='4'; //right
     Serial.println(direction);
    }
    else if (incomingByte == 98)
-  {direction ='b';
+  {direction ='B';
     Serial.println(direction);
    }
    else if (incomingByte == 102)
-  {direction ='f';
+  {direction ='F';
     Serial.println(direction);
    }
 }}

@@ -4,4 +4,22 @@ s = serial.Serial('COM10', 9600,timeout = 1) # choose the outgoing one
 print("connected!")
 time.sleep(2)
 s.write(b"f")
-print("Sent Message!")
+print("forward")
+time.sleep(6)
+s.write(b"b")
+print("backward!")
+time.sleep(6)
+s.write(b"l")
+print("left")
+time.sleep(6)
+s.write(b"r")
+print("right")
+time.sleep(6)
+s.write(b"s")
+print("stop")
+time.sleep(6)
+
+
+
+
+

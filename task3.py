@@ -7,15 +7,146 @@ import requests as req
 import json
 import math
 
+def crop_lane(edges):
+    height, width = edges.shape
+    mask = np.zeros_like(edges)
+
+    # only focus bottom half of the screen
+    polygon = np.array([[
+        (int(0.2* width) , int(height*0.4)),
+        (int(width*0.8),int(height*0.4)),
+        (int(width*0.8),int(height)),
+        (int(0.2*width), int(height)),
+    ]], np.int32)
+
+    # polygon = np.array([[
+    #     (0, height),
+    #     (width , int(height * 0.4)),
+    #     (width , int(height)),
+    #     (0, int(height)),
+    # ]], np.int32)
+    cv2.fillPoly(mask, polygon, 255)
+    cropped_edges = cv2.bitwise_and(edges, mask)
+    # cv2.imshow("cropped", cropped_edges)
+    return cropped_edges
+
+    return
+
+
+def contour(src,edges ,thresh = 105 ):
+    ###Contour
+    src_gray = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
+    src_gray = cv2.blur(src_gray, (3, 3))
+    # src_gray = crop_lane(src_gray)
+    src_gray = region_of_interest(src_gray)
+    ## [Canny]
+    # Detect edges using Canny
+    threshold = thresh
+    canny_output = cv2.Canny(src_gray, threshold, threshold * 2)
+    ## [Canny]
+    ## [findContours]
+    # Find contours
+    contours, _ = cv2.findContours(canny_output, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    ## [findContours]
+    # Approximate contours to polygons + get bounding rects and circles
+    contours_poly = [None] * len(contours)
+    boundRect = [None] * len(contours)
+    for i, c in enumerate(contours):
+        contours_poly[i] = cv2.approxPolyDP(c, 3, True)
+        boundRect[i] = cv2.boundingRect(
+            contours_poly[i]
+        )  # x,y,w,h = cv2.boundingRect(c)
+        print("coordinates",boundRect[i])
+    ## [zeroMat]
+    drawing = np.zeros(
+        (canny_output.shape[0], canny_output.shape[1], 3), dtype=np.uint8
+    )
+    ## [zeroMat]
+
+    ## [forContour]python
+    # Draw polygonal contour + bonding rects + circle
+    for i in range(len(contours)):
+        color = (255, 255, 255)
+        cv2.drawContours(drawing, contours_poly, i, color)
+        cv2.rectangle(
+            drawing,
+            (int(boundRect[i][0]), int(boundRect[i][1])),
+            (
+                int(boundRect[i][0] + boundRect[i][2]),
+                int(boundRect[i][1] + boundRect[i][3]),
+            ),
+            color,
+            2,
+        )
+        # hull.append(cv2.convexHull(contours[i], False))
+        # cv2.drawContours(drawing, hull, i, color, 1, 8)
+
+    cv2.imshow("Contours", drawing)
+    drawing_gray = cv2.cvtColor(drawing, cv2.COLOR_BGR2GRAY)
+    combined = cv2.add(drawing_gray, edges)
+    combined_pic = cv2.add(drawing, src)  # overlay contour on src
+    #cv2.imshow("combined", combined_pic)
+
+    h, w = combined.shape[:2]
+    filled_from_bottom = np.zeros((h, w), dtype=np.uint8)
+    for col in range(w):
+        for row in reversed(range(h)):
+            if drawing_gray[row][col] < 255:
+                filled_from_bottom[row][col] = 255
+            else:
+                break
+
+    cv2.imshow("filled", filled_from_bottom)
+
+    ###link https://www.learnopencv.com/filling-holes-in-an-image-using-opencv-python-c/
+    # # Copy the thresholded image.
+    # im_floodfill = im_th.copy()
+
+    # # Mask used to flood filling.
+    # # Notice the size needs to be 2 pixels than the image.
+    # h, w = im_th.shape[:2]
+    # mask = np.zeros((h+2, w+2), np.uint8)
+
+    # # Floodfill from point (0, 0)
+    # cv2.floodFill(im_floodfill, mask, (0,0), 255)
+
+    ###Erosion
+    kernel = np.ones((5, 5), np.uint8)
+    erosion = cv2.erode(filled_from_bottom, kernel, iterations=1)
+    # ###Smoothing
+    blur = cv2.bilateralFilter(filled_from_bottom, 9, 75, 75)
+    # cv2.imshow("smoothed", blur)
+    # ###Path finding  link http://opencvpython.blogspot.com/2012/05/skeletonization-using-opencv-python.html
+    # # https://stackoverflow.com/questions/21039535/opencv-extract-path-centerline-from-arbitrary-area
+    imgblur = blur.copy()
+    skel = np.zeros(imgblur.shape, np.uint8)
+    element = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+    done = False
+    size = np.size(imgblur)
+    while (not done):
+        eroded = cv2.erode(imgblur, element)
+        temp = cv2.dilate(eroded, element)
+        temp = cv2.subtract(imgblur, temp)
+        skel = cv2.bitwise_or(skel, temp)
+        imgblur = eroded.copy()
+
+        zeros = size - cv2.countNonZero(imgblur)
+        if zeros == size:
+            done = True
+    # not_skel = cv2.bitwise_not(skel)
+    skel_rgb = cv2.cvtColor(skel, cv2.COLOR_GRAY2RGB)
+    pic = cv2.add(combined_pic, skel_rgb)
+    return pic
+
+
+
+
 def detect_edges(frame):
-    # height = inputImage.shape[0]
-    # width = inputImage.shape[1]
     inputImageHSV = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    cv2.imshow("hsv", inputImageHSV)
+   # cv2.imshow("hsv", inputImageHSV)
     lower_green = np.array([80, 40, 40])
     upper_green = np.array([100, 255, 255])
     mask = cv2.inRange(inputImageHSV, lower_green, upper_green)
-    # cv2.imshow("blue mask", mask)
     edges = cv2.Canny(mask, 200, 400)
     return edges
 
@@ -26,15 +157,15 @@ def region_of_interest(edges):
 
     # only focus bottom half of the screen
     polygon = np.array([[
-        (0, height * 1 / 2),
-        (width, height * 1 / 2),
+        (0, height * 0.2),
+        (width, height * 0.2),
         (width, height),
         (0, height),
     ]], np.int32)
 
     cv2.fillPoly(mask, polygon, 255)
     cropped_edges = cv2.bitwise_and(edges, mask)
-    cv2.imshow("cropped", cropped_edges)
+    #cv2.imshow("cropped", cropped_edges)
     return cropped_edges
 
 
@@ -113,7 +244,7 @@ def detect_lane(frame):
     line_segments = detect_line_segments(ROI)
     lane_lines = average_slope_intercept(frame, line_segments)
 
-    return lane_lines
+    return lane_lines, edges
 
 
 def display_lines(frame, lines, line_color=(0, 255, 0), line_width=2):
@@ -153,45 +284,25 @@ def compute_steering_angle(frame, lane_lines):
         return steering_angle
 
 def send_motion_commands(s, steering_angle):
-    if steering_angle >= 80 and steering_angle <= 100:
+    if steering_angle >= 87 and steering_angle <= 93:
         s.write(b"f")
         print("forward")
-        time.sleep(0.25)
-    elif steering_angle < 80:
+        #time.sleep(0.25)
+    elif steering_angle < 87:
         s.write(b"l")
         print("left")
-        time.sleep(0.25)
+        #time.sleep(0.25)
     elif steering_angle == None:
-        s.write(b"s")
+        s.write(b"f")
         print("stop")
-        time.sleep(0.25)
+        #time.sleep(0.25)
     else:
         s.write(b"r")
         print("right")
-        time.sleep(0.25)
-
-
-
-
-        # s.write(b"b")
-        # print("backward!")
-        # time.sleep(5)
-        #
-        # s.write(b"s")
-        # print("stop")
-        # time.sleep(5)
 
 def display_heading_line(frame, steering_angle, line_color=(0, 0, 255), line_width=5, ):
     heading_image = np.zeros_like(frame)
     height, width, _ = frame.shape
-    # figure out the heading line from steering angle
-    # heading line (x1,y1) is always center bottom of the screen
-    # (x2, y2) requires a bit of trigonometry
-
-    # Note: the steering angle of:
-    # 0-89 degree: turn left
-    # 90 degree: going straight
-    # 91-180 degree: turn right
     steering_angle_radian = steering_angle / 180 * math.pi
     x1 = int(width / 2)
     y1 = height
@@ -205,27 +316,30 @@ def display_heading_line(frame, steering_angle, line_color=(0, 0, 255), line_wid
 
 
 def main():
-    url = "http://192.168.43.1:8080/shot.jpg"
-    resp = req.get("http://6f3d504a.ngrok.io/getRoom")
-    print("I am not in yet !!")
+    url = "http://172.28.130.47:8080/shot.jpg"
+    resp = req.get("http://78608f40.ngrok.io/getRoom")
+    count = 1
     json_string = json.loads(resp.text)
-
+    print("I am not in yet !!")
     if json_string['t'] == 2:
-        s = serial.Serial('COM10', 9600, timeout=1)
+        s = serial.Serial('COM13', 9600, timeout=1)
         print('hello from the other side')
         while 1:
-              # choose the outgoing one
-                # print("connected!")
-                #time.sleep(2)
                 img_resp = req.get(url)
-                # # print(type(img_resp))
                 img_arr = np.array(bytearray(img_resp.content), dtype=np.uint8)
                 inputImage = cv2.imdecode(img_arr, -1)
-                lane_lines = detect_lane(inputImage)
+
+                if count % 5 == 0:
+                    inputImage = contour(inputImage, edges, 200)
+                else:
+                    lane_lines, edges = detect_lane(inputImage)
                 lane_lines_image = display_lines(inputImage, lane_lines)
                 steering = compute_steering_angle(inputImage, lane_lines)
                 if steering == None:
                     print("None")
+                    s.write(b"f")
+                    #time.sleep(0.25)
+
                 else:
                     heading_line_image = display_heading_line(inputImage, steering, (0, 0, 255), 5, )
                     send_motion_commands(s, steering)
@@ -234,6 +348,8 @@ def main():
                     cv2.imshow("Heading Line", heading_line_image)
                 if cv2.waitKey(1) == 27:
                     break
+
+                count += 1
 
 
 main()

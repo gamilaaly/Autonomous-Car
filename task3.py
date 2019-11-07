@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 import logging
-#import serial
+import serial
 import time
 import requests as req
 import json

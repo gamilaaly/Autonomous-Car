@@ -7,8 +7,6 @@ import requests as req
 import json
 import math
 
-
-
 def detect_edges(frame):
     # height = inputImage.shape[0]
     # width = inputImage.shape[1]
@@ -154,19 +152,23 @@ def compute_steering_angle(frame, lane_lines):
         steering_angle = angle_to_mid_deg + 90  # this is the steering angle needed by picar front wheel
         return steering_angle
 
-def send_motion_commands(steering_angle):
-    if steering_angle >= 88 and steering_angle <= 92:
-        #s.write(b"f")
+def send_motion_commands(s, steering_angle):
+    if steering_angle >= 80 and steering_angle <= 100:
+        s.write(b"f")
         print("forward")
-        time.sleep(5)
-    elif steering_angle < 88:
-        #s.write(b"l")
+        time.sleep(0.25)
+    elif steering_angle < 80:
+        s.write(b"l")
         print("left")
-        time.sleep(5)
+        time.sleep(0.25)
+    elif steering_angle == None:
+        s.write(b"s")
+        print("stop")
+        time.sleep(0.25)
     else:
-        #s.write(b"r")
+        s.write(b"r")
         print("right")
-        time.sleep(5)
+        time.sleep(0.25)
 
 
 
@@ -203,35 +205,35 @@ def display_heading_line(frame, steering_angle, line_color=(0, 0, 255), line_wid
 
 
 def main():
-    url = "http://172.28.134.252:8080/shot.jpg"
+    url = "http://192.168.43.1:8080/shot.jpg"
+    resp = req.get("http://6f3d504a.ngrok.io/getRoom")
+    print("I am not in yet !!")
+    json_string = json.loads(resp.text)
 
-    while 1:
-        resp = req.get("http://6f3d504a.ngrok.io/getRoom")
-        print("I am not in yet !!")
-        json_string = json.loads(resp.text)
-
-        if json_string['t'] == 2:
-            print('hello from the other side')
-            #s = serial.Serial('COM10', 9600, timeout=1)  # choose the outgoing one
-            # print("connected!")
-            #time.sleep(2)
-            img_resp = req.get(url)
-            # # print(type(img_resp))
-            img_arr = np.array(bytearray(img_resp.content), dtype=np.uint8)
-            inputImage = cv2.imdecode(img_arr, -1)
-            lane_lines = detect_lane(inputImage)
-            lane_lines_image = display_lines(inputImage, lane_lines)
-            steering = compute_steering_angle(inputImage, lane_lines)
-            if steering == None:
-                print("None")
-            else:
-                heading_line_image = display_heading_line(inputImage, steering, (0, 0, 255), 5, )
-                send_motion_commands(steering)
-                cv2.imshow("AndroidCam", inputImage)
-                #cv2.imshow("Lane Lines", lane_lines_image)
-                cv2.imshow("Heading Line", heading_line_image)
-            if cv2.waitKey(1) == 27:
-                break
+    if json_string['t'] == 2:
+        s = serial.Serial('COM10', 9600, timeout=1)
+        print('hello from the other side')
+        while 1:
+              # choose the outgoing one
+                # print("connected!")
+                #time.sleep(2)
+                img_resp = req.get(url)
+                # # print(type(img_resp))
+                img_arr = np.array(bytearray(img_resp.content), dtype=np.uint8)
+                inputImage = cv2.imdecode(img_arr, -1)
+                lane_lines = detect_lane(inputImage)
+                lane_lines_image = display_lines(inputImage, lane_lines)
+                steering = compute_steering_angle(inputImage, lane_lines)
+                if steering == None:
+                    print("None")
+                else:
+                    heading_line_image = display_heading_line(inputImage, steering, (0, 0, 255), 5, )
+                    send_motion_commands(s, steering)
+                    cv2.imshow("AndroidCam", inputImage)
+                    #cv2.imshow("Lane Lines", lane_lines_image)
+                    cv2.imshow("Heading Line", heading_line_image)
+                if cv2.waitKey(1) == 27:
+                    break
 
 
 main()
